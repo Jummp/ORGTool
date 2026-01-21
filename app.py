@@ -118,11 +118,66 @@ class ConsultantProject(db.Model):
         return (0, 0)  # No end date, sort last
 
 
+class Industry(db.Model):
+    """Industry/Sector catalog."""
+    __tablename__ = 'industry'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    color = db.Column(db.String(20), default='#6c757d')  # For visualization
+
+    consultant_industries = db.relationship('ConsultantIndustry', backref='industry', lazy=True)
+
+    def __repr__(self):
+        return f'<Industry {self.name}>'
+
+
+class ConsultantIndustry(db.Model):
+    """Consultant industry experience."""
+    __tablename__ = 'consultant_industry'
+    id = db.Column(db.Integer, primary_key=True)
+    consultant_id = db.Column(db.Integer, db.ForeignKey('consultant.id'), nullable=False)
+    industry_id = db.Column(db.Integer, db.ForeignKey('industry.id'), nullable=False)
+
+    def __repr__(self):
+        return f'<ConsultantIndustry {self.consultant_id}-{self.industry_id}>'
+
+
+class Certification(db.Model):
+    """Certification catalog."""
+    __tablename__ = 'certification'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+
+    consultant_certifications = db.relationship('ConsultantCertification', backref='certification', lazy=True)
+
+    def __repr__(self):
+        return f'<Certification {self.name}>'
+
+
+class ConsultantCertification(db.Model):
+    """Consultant certifications."""
+    __tablename__ = 'consultant_certification'
+    id = db.Column(db.Integer, primary_key=True)
+    consultant_id = db.Column(db.Integer, db.ForeignKey('consultant.id'), nullable=False)
+    certification_id = db.Column(db.Integer, db.ForeignKey('certification.id'), nullable=False)
+
+    def __repr__(self):
+        return f'<ConsultantCertification {self.consultant_id}-{self.certification_id}>'
+
+
+# Add relationships to Consultant model
+Consultant.industries = db.relationship('ConsultantIndustry', backref='consultant', lazy=True, cascade='all, delete-orphan')
+Consultant.certifications = db.relationship('ConsultantCertification', backref='consultant', lazy=True, cascade='all, delete-orphan')
+
+
 # =============================================================================
 # SEED DATA
 # =============================================================================
 
-BASE_SKILLS = ['Dati', 'PM', 'AI', 'Coraggio civile', 'Empowering']
+BASE_SKILLS = ['Dati', 'PM', 'AI', 'Coraggio civile', 'Empowering',
+               'Change Management', 'DEI', 'Training Design', 'Coaching',
+               'Leadership Development', 'HR Strategy', 'Organizational Design',
+               'Team Building', 'Workforce Planning', 'Talent Management']
 
 DEMO_PROJECTS = [
     {'name': 'Internal – AI Adoption Workshop', 'client': 'Internal', 'domain_tags': 'AI, Training'},
@@ -130,9 +185,26 @@ DEMO_PROJECTS = [
     {'name': 'Lavazza – Mental Health Day', 'client': 'Lavazza', 'domain_tags': 'Wellbeing, Training'},
 ]
 
+BASE_INDUSTRIES = [
+    {'name': 'Insurance', 'color': '#17a2b8'},
+    {'name': 'Technology & Digital', 'color': '#6f42c1'},
+    {'name': 'Professional Services', 'color': '#fd7e14'},
+    {'name': 'Manufacturing', 'color': '#28a745'},
+    {'name': 'Construction & Real Estate', 'color': '#6c757d'},
+    {'name': 'Media & Entertainment', 'color': '#e83e8c'},
+    {'name': 'Retail & Consumer Goods', 'color': '#20c997'},
+    {'name': 'Pharma & Healthcare', 'color': '#dc3545'},
+    {'name': 'Financial Services', 'color': '#007bff'},
+]
+
+BASE_CERTIFICATIONS = [
+    'ADKAR', 'PMP', 'Design Thinking', 'Agile', 'Scrum Master',
+    'PROSCI', 'ICF Coach', 'Six Sigma', 'SHRM', 'CIPD'
+]
+
 
 def seed_base_data():
-    """Seed base skills and demo projects if not present."""
+    """Seed base skills, projects, industries and certifications if not present."""
     # Seed skills
     for skill_name in BASE_SKILLS:
         existing = Skill.query.filter_by(name=skill_name).first()
@@ -148,6 +220,18 @@ def seed_base_data():
                 client=proj_data['client'],
                 domain_tags=proj_data['domain_tags']
             ))
+
+    # Seed industries
+    for ind_data in BASE_INDUSTRIES:
+        existing = Industry.query.filter_by(name=ind_data['name']).first()
+        if not existing:
+            db.session.add(Industry(name=ind_data['name'], color=ind_data['color']))
+
+    # Seed certifications
+    for cert_name in BASE_CERTIFICATIONS:
+        existing = Certification.query.filter_by(name=cert_name).first()
+        if not existing:
+            db.session.add(Certification(name=cert_name))
 
     db.session.commit()
 
@@ -1037,6 +1121,159 @@ def match():
                           project_days=project_days,
                           chart_data=chart_data,
                           view=view)
+
+
+@app.route('/knowledge-graph')
+def knowledge_graph():
+    """Knowledge Graph visualization page."""
+    # Get filter parameters
+    view_mode = request.args.get('view', 'complete')  # complete, skills, industries, projects
+
+    # Get all data
+    consultants = Consultant.query.all()
+    skills = Skill.query.all()
+    projects = Project.query.all()
+    industries = Industry.query.all()
+    certifications = Certification.query.all()
+
+    # Build nodes and edges for vis.js
+    nodes = []
+    edges = []
+
+    # Add consultant nodes
+    for c in consultants:
+        nodes.append({
+            'id': f'c_{c.id}',
+            'label': c.name,
+            'group': 'consultant',
+            'title': c.name,
+            'shape': 'dot',
+            'size': 30,
+            'color': '#e74c3c'
+        })
+
+    # Add skill nodes and edges (if view includes skills)
+    if view_mode in ['complete', 'skills']:
+        skills_with_consultants = set()
+        for c in consultants:
+            for cs in c.skills:
+                skills_with_consultants.add(cs.skill_id)
+                edges.append({
+                    'from': f'c_{c.id}',
+                    'to': f's_{cs.skill_id}',
+                    'value': cs.level,
+                    'title': f'Livello: {cs.level}'
+                })
+
+        for s in skills:
+            if s.id in skills_with_consultants:
+                nodes.append({
+                    'id': f's_{s.id}',
+                    'label': s.name,
+                    'group': 'skill',
+                    'title': s.name,
+                    'shape': 'box',
+                    'color': '#f39c12'
+                })
+
+    # Add project nodes and edges (if view includes projects)
+    if view_mode in ['complete', 'projects']:
+        projects_with_consultants = set()
+        for c in consultants:
+            for cp in c.projects:
+                projects_with_consultants.add(cp.project_id)
+                edges.append({
+                    'from': f'c_{c.id}',
+                    'to': f'p_{cp.project_id}',
+                    'title': cp.role or 'Partecipante',
+                    'dashes': True
+                })
+
+        for p in projects:
+            if p.id in projects_with_consultants:
+                nodes.append({
+                    'id': f'p_{p.id}',
+                    'label': p.name[:20] + '...' if len(p.name) > 20 else p.name,
+                    'group': 'project',
+                    'title': f'{p.name}\nCliente: {p.client or "N/A"}',
+                    'shape': 'diamond',
+                    'color': '#3498db'
+                })
+
+    # Add industry nodes and edges (if view includes industries)
+    if view_mode in ['complete', 'industries']:
+        industries_with_consultants = set()
+        for c in consultants:
+            for ci in c.industries:
+                industries_with_consultants.add(ci.industry_id)
+                edges.append({
+                    'from': f'c_{c.id}',
+                    'to': f'i_{ci.industry_id}',
+                    'color': {'color': '#95a5a6'}
+                })
+
+        for ind in industries:
+            if ind.id in industries_with_consultants:
+                nodes.append({
+                    'id': f'i_{ind.id}',
+                    'label': ind.name,
+                    'group': 'industry',
+                    'title': ind.name,
+                    'shape': 'box',
+                    'color': ind.color
+                })
+
+    # Statistics
+    stats = {
+        'consultants': len(consultants),
+        'skills': len([s for s in skills if any(cs.skill_id == s.id for c in consultants for cs in c.skills)]),
+        'projects': len([p for p in projects if any(cp.project_id == p.id for c in consultants for cp in c.projects)]),
+        'industries': len(industries),
+        'certifications': len(certifications)
+    }
+
+    # Prepare consultant details for sidebar
+    consultant_details = []
+    for c in consultants:
+        details = {
+            'id': c.id,
+            'name': c.name,
+            'skills': [{'name': cs.skill.name, 'level': cs.level} for cs in c.skills],
+            'industries': [ci.industry.name for ci in c.industries],
+            'certifications': [cc.certification.name for cc in c.certifications],
+            'projects': [{'name': cp.project.name, 'role': cp.role} for cp in c.projects]
+        }
+        consultant_details.append(details)
+
+    graph_data = json.dumps({
+        'nodes': nodes,
+        'edges': edges
+    })
+
+    return render_template('knowledge_graph.html',
+                          graph_data=graph_data,
+                          consultants=consultant_details,
+                          skills=skills,
+                          industries=industries,
+                          certifications=certifications,
+                          stats=stats,
+                          view_mode=view_mode)
+
+
+@app.route('/api/consultant/<int:consultant_id>')
+def api_consultant_detail(consultant_id):
+    """API endpoint for consultant details (used by knowledge graph)."""
+    consultant = Consultant.query.get_or_404(consultant_id)
+
+    return json.dumps({
+        'id': consultant.id,
+        'name': consultant.name,
+        'skills': [{'name': cs.skill.name, 'level': cs.level} for cs in consultant.skills],
+        'industries': [ci.industry.name for ci in consultant.industries],
+        'certifications': [cc.certification.name for cc in consultant.certifications],
+        'projects': [{'name': cp.project.name, 'role': cp.role, 'client': cp.project.client}
+                     for cp in consultant.projects]
+    })
 
 
 @app.route('/admin/reset-db', methods=['GET', 'POST'])

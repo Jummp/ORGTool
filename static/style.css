@@ -230,6 +230,7 @@ body {
 .home-btn-secondary { border-top: 4px solid var(--success); }
 .home-btn-accent { border-top: 4px solid var(--info); }
 .home-btn-neutral { border-top: 4px solid var(--warning); }
+.home-btn-graph { border-top: 4px solid #e74c3c; }
 
 /* Buttons */
 .btn {

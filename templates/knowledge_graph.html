@@ -1,0 +1,609 @@
+{% extends "base.html" %}
+
+{% block title %}Knowledge Graph - Staffing Tool{% endblock %}
+
+{% block head %}
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+    .kg-container {
+        display: flex;
+        height: calc(100vh - 140px);
+        gap: 0;
+    }
+
+    .kg-sidebar {
+        width: 280px;
+        background: var(--bg-white);
+        border-right: 1px solid var(--border);
+        overflow-y: auto;
+        padding: 1rem;
+        flex-shrink: 0;
+    }
+
+    .kg-main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .kg-graph {
+        flex: 1;
+        background: #fafafa;
+        position: relative;
+    }
+
+    #network {
+        width: 100%;
+        height: 100%;
+    }
+
+    .kg-detail-panel {
+        width: 320px;
+        background: var(--bg-white);
+        border-left: 1px solid var(--border);
+        overflow-y: auto;
+        padding: 1.5rem;
+        display: none;
+    }
+
+    .kg-detail-panel.active {
+        display: block;
+    }
+
+    /* Sidebar Styles */
+    .kg-section {
+        margin-bottom: 1.5rem;
+    }
+
+    .kg-section h3 {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: var(--text-light);
+        margin-bottom: 0.75rem;
+        letter-spacing: 0.5px;
+    }
+
+    .kg-search {
+        width: 100%;
+        padding: 0.625rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-small);
+        font-size: 0.875rem;
+    }
+
+    .kg-view-options {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .kg-view-btn {
+        display: block;
+        padding: 0.75rem;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-small);
+        text-decoration: none;
+        color: var(--text);
+        font-size: 0.875rem;
+        transition: var(--transition);
+    }
+
+    .kg-view-btn:hover {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+
+    .kg-view-btn.active {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+
+    .kg-view-btn small {
+        display: block;
+        font-size: 0.75rem;
+        opacity: 0.8;
+        margin-top: 0.25rem;
+    }
+
+    .kg-badge {
+        display: inline-block;
+        padding: 0.125rem 0.5rem;
+        background: var(--success);
+        color: white;
+        border-radius: 10px;
+        font-size: 0.625rem;
+        text-transform: uppercase;
+        margin-left: 0.5rem;
+    }
+
+    /* Legend */
+    .kg-legend {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .kg-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    .kg-legend-dot {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+    }
+
+    .kg-legend-box {
+        width: 16px;
+        height: 16px;
+        border-radius: 2px;
+    }
+
+    /* Filters */
+    .kg-filter-group {
+        margin-bottom: 0.75rem;
+    }
+
+    .kg-filter-group label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        cursor: pointer;
+    }
+
+    .kg-filter-group input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+    }
+
+    .kg-color-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 2px;
+        display: inline-block;
+    }
+
+    /* Statistics */
+    .kg-stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+    }
+
+    .kg-stat {
+        text-align: center;
+        padding: 0.75rem;
+        background: var(--bg);
+        border-radius: var(--radius-small);
+    }
+
+    .kg-stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--primary);
+    }
+
+    .kg-stat-label {
+        font-size: 0.75rem;
+        color: var(--text-light);
+    }
+
+    /* Detail Panel */
+    .kg-detail-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 1.5rem;
+    }
+
+    .kg-detail-name {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin: 0;
+    }
+
+    .kg-detail-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: var(--text-light);
+        line-height: 1;
+    }
+
+    .kg-detail-section {
+        margin-bottom: 1.25rem;
+    }
+
+    .kg-detail-section h4 {
+        font-size: 0.8125rem;
+        color: var(--text-light);
+        margin-bottom: 0.5rem;
+    }
+
+    .kg-detail-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.375rem;
+    }
+
+    .kg-tag {
+        display: inline-block;
+        padding: 0.25rem 0.625rem;
+        background: var(--bg);
+        border-radius: 12px;
+        font-size: 0.75rem;
+    }
+
+    .kg-tag.skill { background: #fef3c7; color: #92400e; }
+    .kg-tag.industry { background: #dbeafe; color: #1e40af; }
+    .kg-tag.cert { background: #d1fae5; color: #065f46; }
+    .kg-tag.project { background: #e0e7ff; color: #3730a3; }
+
+    .kg-detail-text {
+        font-size: 0.875rem;
+        color: var(--text);
+        line-height: 1.5;
+    }
+
+    /* Filter tabs */
+    .kg-filter-tabs {
+        display: flex;
+        gap: 0.25rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .kg-filter-tab {
+        flex: 1;
+        padding: 0.5rem;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-small);
+        font-size: 0.75rem;
+        cursor: pointer;
+        text-align: center;
+    }
+
+    .kg-filter-tab.active {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+    }
+
+    .kg-filter-content {
+        display: none;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    .kg-filter-content.active {
+        display: block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="kg-container">
+    <!-- Left Sidebar -->
+    <div class="kg-sidebar">
+        <div class="kg-section">
+            <h3>Knowledge Graph <span class="kg-badge">POC</span></h3>
+            <p style="font-size: 0.8125rem; color: var(--text-light); margin-bottom: 1rem;">
+                Mida Consulting - Focus Consulenti
+            </p>
+        </div>
+
+        <div class="kg-section">
+            <h3>Cerca</h3>
+            <input type="text" class="kg-search" id="search-input"
+                   placeholder="Cerca consulenti, competenze...">
+        </div>
+
+        <div class="kg-section">
+            <h3>Vista</h3>
+            <div class="kg-view-options">
+                <a href="{{ url_for('knowledge_graph', view='complete') }}"
+                   class="kg-view-btn {% if view_mode == 'complete' %}active{% endif %}">
+                    Completa
+                    <small>Tutti i nodi e relazioni</small>
+                </a>
+                <a href="{{ url_for('knowledge_graph', view='skills') }}"
+                   class="kg-view-btn {% if view_mode == 'skills' %}active{% endif %}">
+                    Consulenti-Competenze
+                    <small>Mappa delle competenze</small>
+                </a>
+                <a href="{{ url_for('knowledge_graph', view='industries') }}"
+                   class="kg-view-btn {% if view_mode == 'industries' %}active{% endif %}">
+                    Consulenti-Industry
+                    <small>Chi ha esperienza in quali settori</small>
+                </a>
+                <a href="{{ url_for('knowledge_graph', view='projects') }}"
+                   class="kg-view-btn {% if view_mode == 'projects' %}active{% endif %}">
+                    Consulenti-Progetti
+                    <small>Chi ha lavorato su quali progetti</small>
+                </a>
+            </div>
+        </div>
+
+        <div class="kg-section">
+            <h3>Legenda Nodi</h3>
+            <div class="kg-legend">
+                <div class="kg-legend-item">
+                    <span class="kg-legend-dot" style="background: #e74c3c;"></span>
+                    Consulente
+                </div>
+                <div class="kg-legend-item">
+                    <span class="kg-legend-box" style="background: #f39c12;"></span>
+                    Competenza
+                </div>
+                <div class="kg-legend-item">
+                    <span class="kg-legend-box" style="background: #3498db; transform: rotate(45deg);"></span>
+                    Progetto
+                </div>
+                <div class="kg-legend-item">
+                    <span class="kg-legend-box" style="background: #6c757d;"></span>
+                    Industry
+                </div>
+            </div>
+        </div>
+
+        <div class="kg-section">
+            <h3>Filtri</h3>
+            <div class="kg-filter-tabs">
+                <button class="kg-filter-tab active" onclick="showFilterTab('industry')">Industry</button>
+                <button class="kg-filter-tab" onclick="showFilterTab('skills')">Competenze</button>
+            </div>
+
+            <div id="filter-industry" class="kg-filter-content active">
+                {% for ind in industries %}
+                <div class="kg-filter-group">
+                    <label>
+                        <input type="checkbox" checked data-filter="industry" value="{{ ind.id }}">
+                        <span class="kg-color-dot" style="background: {{ ind.color }};"></span>
+                        {{ ind.name }}
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div id="filter-skills" class="kg-filter-content">
+                {% for skill in skills[:10] %}
+                <div class="kg-filter-group">
+                    <label>
+                        <input type="checkbox" checked data-filter="skill" value="{{ skill.id }}">
+                        {{ skill.name }}
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="kg-section">
+            <h3>Statistiche</h3>
+            <div class="kg-stats">
+                <div class="kg-stat">
+                    <div class="kg-stat-value">{{ stats.consultants }}</div>
+                    <div class="kg-stat-label">Consulenti</div>
+                </div>
+                <div class="kg-stat">
+                    <div class="kg-stat-value">{{ stats.industries }}</div>
+                    <div class="kg-stat-label">Industry</div>
+                </div>
+                <div class="kg-stat">
+                    <div class="kg-stat-value">{{ stats.skills }}</div>
+                    <div class="kg-stat-label">Competenze</div>
+                </div>
+                <div class="kg-stat">
+                    <div class="kg-stat-value">{{ stats.certifications }}</div>
+                    <div class="kg-stat-label">Certificazioni</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Graph Area -->
+    <div class="kg-main">
+        <div class="kg-graph">
+            <div id="network"></div>
+        </div>
+    </div>
+
+    <!-- Right Detail Panel -->
+    <div class="kg-detail-panel" id="detail-panel">
+        <div class="kg-detail-header">
+            <h3 class="kg-detail-name" id="detail-name">-</h3>
+            <button class="kg-detail-close" onclick="closeDetailPanel()">&times;</button>
+        </div>
+
+        <div class="kg-detail-section" id="detail-industries-section">
+            <h4>Industry di esperienza:</h4>
+            <div class="kg-detail-tags" id="detail-industries"></div>
+        </div>
+
+        <div class="kg-detail-section" id="detail-skills-section">
+            <h4>Competenze:</h4>
+            <div class="kg-detail-tags" id="detail-skills"></div>
+        </div>
+
+        <div class="kg-detail-section" id="detail-certs-section">
+            <h4>Certificazioni:</h4>
+            <div class="kg-detail-tags" id="detail-certs"></div>
+        </div>
+
+        <div class="kg-detail-section" id="detail-projects-section">
+            <h4>Progetti:</h4>
+            <div class="kg-detail-tags" id="detail-projects"></div>
+        </div>
+
+        <div style="margin-top: 1.5rem;">
+            <a href="#" id="detail-link" class="btn btn-primary btn-small">Vedi profilo completo</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const graphData = {{ graph_data|safe }};
+const consultantsData = {{ consultants|tojson }};
+
+// Create network
+const container = document.getElementById('network');
+
+const data = {
+    nodes: new vis.DataSet(graphData.nodes),
+    edges: new vis.DataSet(graphData.edges)
+};
+
+const options = {
+    nodes: {
+        font: {
+            size: 14,
+            face: 'system-ui, -apple-system, sans-serif'
+        },
+        borderWidth: 2,
+        shadow: true
+    },
+    edges: {
+        width: 2,
+        color: {
+            color: '#bdc3c7',
+            highlight: '#3498db'
+        },
+        smooth: {
+            type: 'continuous'
+        }
+    },
+    physics: {
+        enabled: true,
+        barnesHut: {
+            gravitationalConstant: -3000,
+            centralGravity: 0.3,
+            springLength: 150,
+            springConstant: 0.04,
+            damping: 0.09
+        },
+        stabilization: {
+            iterations: 150
+        }
+    },
+    interaction: {
+        hover: true,
+        tooltipDelay: 200
+    }
+};
+
+const network = new vis.Network(container, data, options);
+
+// Handle node click
+network.on('click', function(params) {
+    if (params.nodes.length > 0) {
+        const nodeId = params.nodes[0];
+        if (nodeId.startsWith('c_')) {
+            const consultantId = parseInt(nodeId.split('_')[1]);
+            showConsultantDetail(consultantId);
+        }
+    } else {
+        closeDetailPanel();
+    }
+});
+
+// Handle double-click to open profile
+network.on('doubleClick', function(params) {
+    if (params.nodes.length > 0) {
+        const nodeId = params.nodes[0];
+        if (nodeId.startsWith('c_')) {
+            const consultantId = parseInt(nodeId.split('_')[1]);
+            window.location.href = '/consultant/' + consultantId;
+        }
+    }
+});
+
+function showConsultantDetail(consultantId) {
+    const consultant = consultantsData.find(c => c.id === consultantId);
+    if (!consultant) return;
+
+    document.getElementById('detail-name').textContent = consultant.name;
+    document.getElementById('detail-link').href = '/consultant/' + consultantId;
+
+    // Industries
+    const industriesContainer = document.getElementById('detail-industries');
+    if (consultant.industries && consultant.industries.length > 0) {
+        industriesContainer.innerHTML = consultant.industries
+            .map(i => `<span class="kg-tag industry">${i}</span>`)
+            .join('');
+        document.getElementById('detail-industries-section').style.display = 'block';
+    } else {
+        document.getElementById('detail-industries-section').style.display = 'none';
+    }
+
+    // Skills
+    const skillsContainer = document.getElementById('detail-skills');
+    if (consultant.skills && consultant.skills.length > 0) {
+        skillsContainer.innerHTML = consultant.skills
+            .map(s => `<span class="kg-tag skill">${s.name}</span>`)
+            .join('');
+        document.getElementById('detail-skills-section').style.display = 'block';
+    } else {
+        document.getElementById('detail-skills-section').style.display = 'none';
+    }
+
+    // Certifications
+    const certsContainer = document.getElementById('detail-certs');
+    if (consultant.certifications && consultant.certifications.length > 0) {
+        certsContainer.innerHTML = consultant.certifications
+            .map(c => `<span class="kg-tag cert">${c}</span>`)
+            .join('');
+        document.getElementById('detail-certs-section').style.display = 'block';
+    } else {
+        document.getElementById('detail-certs-section').style.display = 'none';
+    }
+
+    // Projects
+    const projectsContainer = document.getElementById('detail-projects');
+    if (consultant.projects && consultant.projects.length > 0) {
+        projectsContainer.innerHTML = consultant.projects
+            .map(p => `<span class="kg-tag project">${p.name}${p.role ? ' - ' + p.role : ''}</span>`)
+            .join('');
+        document.getElementById('detail-projects-section').style.display = 'block';
+    } else {
+        document.getElementById('detail-projects-section').style.display = 'none';
+    }
+
+    document.getElementById('detail-panel').classList.add('active');
+}
+
+function closeDetailPanel() {
+    document.getElementById('detail-panel').classList.remove('active');
+}
+
+// Search functionality
+document.getElementById('search-input').addEventListener('input', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+
+    data.nodes.forEach(node => {
+        if (node.label.toLowerCase().includes(searchTerm) || searchTerm === '') {
+            data.nodes.update({id: node.id, hidden: false});
+        } else {
+            data.nodes.update({id: node.id, hidden: true});
+        }
+    });
+});
+
+// Filter tabs
+function showFilterTab(tab) {
+    document.querySelectorAll('.kg-filter-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.kg-filter-content').forEach(c => c.classList.remove('active'));
+
+    event.target.classList.add('active');
+    document.getElementById('filter-' + tab).classList.add('active');
+}
+</script>
+{% endblock %}
