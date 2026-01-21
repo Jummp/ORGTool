@@ -1,0 +1,344 @@
+{% extends "base.html" %}
+
+{% block title %}Match Progetto - Staffing Tool{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Match Progetto</h1>
+    <p>Trova i consulenti più adatti per un progetto in base a competenze, disponibilità e esperienze</p>
+</div>
+
+<!-- Match Form -->
+<form method="POST" action="{{ url_for('match') }}" class="match-form">
+    <div class="match-form-grid">
+        <!-- Month Selection -->
+        <div class="form-section-inline">
+            <h3>Mese</h3>
+            <select name="month" class="form-select" required>
+                {% for m in range(1, 13) %}
+                    <option value="{{ m }}" {% if month == m %}selected{% endif %}>
+                        {{ get_month_name(m) }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Project Days (display only) -->
+        <div class="form-section-inline">
+            <h3>Giornate progetto</h3>
+            <input type="number" name="project_days" value="{{ project_days }}"
+                   placeholder="Es: 15" min="1" class="form-input">
+            <small>Solo informativo</small>
+        </div>
+
+        <!-- Reference Project -->
+        <div class="form-section-inline">
+            <h3>Progetto di riferimento</h3>
+            <select name="reference_project_id" class="form-select">
+                <option value="">- nessuno -</option>
+                {% for p in all_projects %}
+                    <option value="{{ p.id }}" {% if reference_project_id == p.id %}selected{% endif %}>
+                        {{ p.name }}{% if p.client %} ({{ p.client }}){% endif %}
+                    </option>
+                {% endfor %}
+            </select>
+            <small>Opzionale: per calcolare similarità progettuale</small>
+        </div>
+    </div>
+
+    <!-- Skills Selection -->
+    <div class="form-section">
+        <h3>Competenze richieste</h3>
+        <p class="section-desc">Seleziona le competenze necessarie e imposta il livello richiesto (default: 3)</p>
+
+        <div class="skills-selection">
+            {% for skill in all_skills %}
+            <div class="skill-selector">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="skill_ids" value="{{ skill.id }}"
+                           {% if skill.id|string in selected_skill_ids %}checked{% endif %}
+                           onchange="toggleSkillLevel(this, {{ skill.id }})">
+                    <span>{{ skill.name }}</span>
+                </label>
+                <select name="skill_level_{{ skill.id }}" id="skill_level_{{ skill.id }}"
+                        class="form-select-small"
+                        {% if skill.id|string not in selected_skill_ids %}disabled{% endif %}>
+                    {% for level in range(1, 6) %}
+                        <option value="{{ level }}"
+                            {% if skill_levels.get(skill.id, 3) == level %}selected{% endif %}>
+                            {{ level }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary btn-large">Trova Match</button>
+    </div>
+</form>
+
+{% if results %}
+<!-- View Toggle -->
+<div class="view-toggle-bar">
+    <span>Visualizzazione:</span>
+    <button type="button" class="toggle-btn {% if view == 'cards' %}active{% endif %}"
+            onclick="switchView('cards')">Cards</button>
+    <button type="button" class="toggle-btn {% if view == 'chart' %}active{% endif %}"
+            onclick="switchView('chart')">Grafico</button>
+    <span class="results-count">{{ results|length }} consulenti trovati</span>
+</div>
+
+<!-- Results Cards -->
+<div id="cards-view" class="results-container" {% if view == 'chart' %}style="display: none;"{% endif %}>
+    <div class="cards-grid match-results">
+        {% for r in results %}
+        <div class="card match-card">
+            <div class="card-header">
+                <div class="match-rank">#{{ loop.index }}</div>
+                <h3>
+                    <a href="{{ url_for('consultant_profile', consultant_id=r.id) }}">{{ r.name }}</a>
+                </h3>
+                <div class="final-score">
+                    <span class="score-value">{{ r.final_score }}</span>
+                    <span class="score-label">punteggio</span>
+                </div>
+            </div>
+
+            <div class="card-body">
+                <!-- Scores Breakdown -->
+                <div class="scores-grid">
+                    <div class="score-item">
+                        <span class="score-name">Skill Fit</span>
+                        <div class="score-bar">
+                            <div class="score-bar-fill skill-fit" style="width: {{ r.skill_fit }}%"></div>
+                        </div>
+                        <span class="score-percent">{{ r.skill_fit }}%</span>
+                    </div>
+
+                    <div class="score-item">
+                        <span class="score-name">Disponibilità</span>
+                        <div class="score-bar">
+                            <div class="score-bar-fill availability" style="width: {{ r.availability }}%"></div>
+                        </div>
+                        <span class="score-percent">{{ r.availability }}%</span>
+                    </div>
+
+                    {% if r.project_experience is not none %}
+                    <div class="score-item">
+                        <span class="score-name">Esperienza Prog.</span>
+                        <div class="score-bar">
+                            <div class="score-bar-fill project-exp" style="width: {{ r.project_experience }}%"></div>
+                        </div>
+                        <span class="score-percent">{{ r.project_experience }}%</span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Skill Breakdown -->
+                {% if r.skill_breakdown %}
+                <div class="skill-breakdown">
+                    <strong>Competenze:</strong>
+                    <div class="skill-comparison">
+                        {% for s in r.skill_breakdown %}
+                        <span class="skill-compare {% if s.met %}met{% else %}unmet{% endif %}">
+                            {{ s.name }}: {{ s.consultant_level }}/{{ s.required_level }}
+                            {% if s.met %}✓{% else %}✗{% endif %}
+                        </span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Project Match Info -->
+                {% if r.best_match_info %}
+                <div class="project-match-info">
+                    <strong>Migliore corrispondenza progetto:</strong>
+                    <div class="match-details">
+                        <span class="match-project">{{ r.best_match_info.project_name }}</span>
+                        {% if r.best_match_info.client_match %}
+                            <span class="badge badge-success">Stesso cliente</span>
+                        {% endif %}
+                        {% if r.best_match_info.common_tags > 0 %}
+                            <span class="badge badge-info">
+                                Tag comuni: {{ r.best_match_info.common_tags }}/{{ r.best_match_info.total_ref_tags }}
+                            </span>
+                        {% endif %}
+                        <span class="badge badge-neutral">{{ r.best_match_info.recency_desc }}</span>
+                        {% if r.best_match_info.intensity %}
+                            <span class="badge">Intensità: {{ r.best_match_info.intensity }}/5</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Workload Info -->
+                <div class="workload-brief">
+                    <strong>Workload {{ get_month_name(month) }}:</strong>
+                    {{ r.workload_data.work_days }} giornate,
+                    carico {{ r.workload_data.perceived_load }}/10
+                </div>
+            </div>
+
+            <div class="card-footer">
+                <a href="{{ url_for('consultant_profile', consultant_id=r.id) }}" class="btn btn-small">Vedi profilo</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Chart View -->
+<div id="chart-view" class="results-container" {% if view == 'cards' %}style="display: none;"{% endif %}>
+    <div class="chart-container chart-large">
+        <canvas id="matchChart"></canvas>
+    </div>
+    <p class="chart-help">
+        Asse X: Disponibilità % (100=completamente disponibile)<br>
+        Asse Y: Skill Fit % (100=soddisfa tutti i requisiti)<br>
+        {% if reference_project %}
+        Colore: Esperienza progetto (verde=alta, rosso=bassa)<br>
+        {% endif %}
+        Dimensione: Punteggio finale<br>
+        Clicca su un punto per aprire il profilo.
+    </p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleSkillLevel(checkbox, skillId) {
+    const select = document.getElementById('skill_level_' + skillId);
+    select.disabled = !checkbox.checked;
+}
+
+{% if results %}
+const chartData = {{ chart_data|safe }};
+
+function switchView(view) {
+    document.getElementById('cards-view').style.display = view === 'cards' ? 'block' : 'none';
+    document.getElementById('chart-view').style.display = view === 'chart' ? 'block' : 'none';
+
+    document.querySelectorAll('.view-toggle-bar .toggle-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+
+    if (view === 'chart' && !window.matchChartInstance) {
+        createMatchChart();
+    }
+}
+
+function createMatchChart() {
+    const ctx = document.getElementById('matchChart').getContext('2d');
+    const hasProjectExp = chartData.consultants.some(c => c.project_experience > 0);
+
+    const data = chartData.consultants.map(c => ({
+        x: c.availability,
+        y: c.skill_fit,
+        name: c.name,
+        id: c.id,
+        final: c.final_score,
+        projectExp: c.project_experience,
+        bestMatch: c.best_match
+    }));
+
+    // Color based on project experience (if applicable) or final score
+    const getColor = (d) => {
+        if (hasProjectExp) {
+            const exp = d.projectExp;
+            if (exp > 60) return 'rgba(46, 204, 113, 0.8)';
+            if (exp > 30) return 'rgba(241, 196, 15, 0.8)';
+            return 'rgba(231, 76, 60, 0.8)';
+        } else {
+            const score = d.final;
+            if (score > 70) return 'rgba(46, 204, 113, 0.8)';
+            if (score > 40) return 'rgba(241, 196, 15, 0.8)';
+            return 'rgba(231, 76, 60, 0.8)';
+        }
+    };
+
+    // Size based on final score
+    const getSize = (d) => {
+        return 8 + (d.final / 100) * 15;
+    };
+
+    window.matchChartInstance = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: 'Consulenti',
+                data: data,
+                backgroundColor: data.map(getColor),
+                borderColor: 'rgba(0, 0, 0, 0.3)',
+                borderWidth: 1,
+                pointRadius: data.map(getSize),
+                pointHoverRadius: data.map(d => getSize(d) + 3)
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    min: 0,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Disponibilità %'
+                    }
+                },
+                y: {
+                    min: 0,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Skill Fit %'
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const d = context.raw;
+                            let lines = [
+                                d.name,
+                                'Punteggio finale: ' + d.final,
+                                'Skill Fit: ' + d.y + '%',
+                                'Disponibilità: ' + d.x + '%'
+                            ];
+                            if (d.projectExp > 0) {
+                                lines.push('Esperienza prog.: ' + d.projectExp + '%');
+                            }
+                            if (d.bestMatch) {
+                                lines.push('Best match: ' + d.bestMatch);
+                            }
+                            return lines;
+                        }
+                    }
+                },
+                legend: {
+                    display: false
+                }
+            },
+            onClick: function(event, elements) {
+                if (elements.length > 0) {
+                    const index = elements[0].index;
+                    const consultantId = data[index].id;
+                    window.location.href = '/consultant/' + consultantId;
+                }
+            }
+        }
+    });
+}
+
+{% if view == 'chart' %}
+document.addEventListener('DOMContentLoaded', function() {
+    createMatchChart();
+});
+{% endif %}
+{% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}{{ consultant.name }} - Staffing Tool{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('inserisci') }}" class="back-link">&larr; Torna ai consulenti</a>
+    <h1>{{ consultant.name }}</h1>
+</div>
+
+<div class="profile-grid">
+    <!-- Skills Section -->
+    <section class="profile-section">
+        <h2>Competenze</h2>
+        {% if skills %}
+        <div class="skills-list">
+            {% for s in skills %}
+            <div class="skill-item">
+                <span class="skill-name">{{ s.name }}</span>
+                <div class="skill-bar">
+                    <div class="skill-bar-fill" style="width: {{ s.level * 20 }}%"></div>
+                </div>
+                <span class="skill-level">{{ s.level }}/5</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="no-data">Nessuna competenza registrata.</p>
+        {% endif %}
+    </section>
+
+    <!-- Workload Section -->
+    <section class="profile-section">
+        <h2>Workload Mensile</h2>
+
+        <div class="view-toggle">
+            <button type="button" class="toggle-btn active" onclick="showWorkloadView('table')">Tabella</button>
+            <button type="button" class="toggle-btn" onclick="showWorkloadView('chart')">Grafico</button>
+        </div>
+
+        <div id="workload-table" class="workload-view">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Mese</th>
+                        <th>Giornate</th>
+                        <th>Carico</th>
+                        <th>Workload %</th>
+                        <th>Disponibilità %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for w in workloads %}
+                    <tr>
+                        <td>{{ w.month_name }}</td>
+                        <td>{{ w.work_days }}</td>
+                        <td>{{ w.perceived_load }}/10</td>
+                        <td>
+                            <span class="badge badge-workload-{{ 'high' if w.workload_percent > 70 else ('medium' if w.workload_percent > 40 else 'low') }}">
+                                {{ w.workload_percent }}%
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge badge-availability-{{ 'high' if w.availability_percent > 60 else ('medium' if w.availability_percent > 30 else 'low') }}">
+                                {{ w.availability_percent }}%
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div id="workload-chart" class="workload-view" style="display: none;">
+            <canvas id="workloadChart" height="300"></canvas>
+        </div>
+    </section>
+
+    <!-- Projects Section -->
+    <section class="profile-section profile-section-full">
+        <h2>Progetti</h2>
+        {% if projects %}
+        <div class="projects-list">
+            {% for p in projects %}
+            <div class="project-card">
+                <div class="project-header">
+                    <h4>
+                        <a href="{{ url_for('projects') }}">{{ p.name }}</a>
+                    </h4>
+                    {% if p.client %}
+                    <span class="project-client">{{ p.client }}</span>
+                    {% endif %}
+                </div>
+                <div class="project-details">
+                    {% if p.role %}
+                    <span class="detail-item"><strong>Ruolo:</strong> {{ p.role }}</span>
+                    {% endif %}
+
+                    {% if p.start_year or p.end_year %}
+                    <span class="detail-item">
+                        <strong>Periodo:</strong>
+                        {% if p.start_month %}{{ get_month_name(p.start_month) }}{% endif %}
+                        {% if p.start_year %}{{ p.start_year }}{% endif %}
+                        {% if p.start_year or p.end_year %} - {% endif %}
+                        {% if p.end_month %}{{ get_month_name(p.end_month) }}{% endif %}
+                        {% if p.end_year %}{{ p.end_year }}{% endif %}
+                    </span>
+                    {% endif %}
+
+                    {% if p.intensity %}
+                    <span class="detail-item"><strong>Intensità:</strong> {{ p.intensity }}/5</span>
+                    {% endif %}
+                </div>
+                {% if p.notes %}
+                <p class="project-notes">{{ p.notes }}</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="no-data">Nessun progetto registrato.</p>
+        {% endif %}
+    </section>
+</div>
+
+<div class="profile-actions">
+    <a href="{{ url_for('inserisci') }}?selected={{ consultant.id }}" class="btn btn-primary">Modifica</a>
+    <a href="{{ url_for('inserisci') }}" class="btn btn-secondary">Torna alla lista</a>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const chartData = {{ chart_data|safe }};
+
+function showWorkloadView(view) {
+    document.getElementById('workload-table').style.display = view === 'table' ? 'block' : 'none';
+    document.getElementById('workload-chart').style.display = view === 'chart' ? 'block' : 'none';
+
+    document.querySelectorAll('.toggle-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+
+    if (view === 'chart' && !window.workloadChartInstance) {
+        createWorkloadChart();
+    }
+}
+
+function createWorkloadChart() {
+    const ctx = document.getElementById('workloadChart').getContext('2d');
+    window.workloadChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: chartData.labels,
+            datasets: [
+                {
+                    label: 'Workload %',
+                    data: chartData.workload,
+                    backgroundColor: 'rgba(231, 76, 60, 0.7)',
+                    borderColor: 'rgba(231, 76, 60, 1)',
+                    borderWidth: 1
+                },
+                {
+                    label: 'Disponibilità %',
+                    data: chartData.availability,
+                    backgroundColor: 'rgba(46, 204, 113, 0.7)',
+                    borderColor: 'rgba(46, 204, 113, 1)',
+                    borderWidth: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Percentuale'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top'
+                }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}

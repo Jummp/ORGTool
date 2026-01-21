@@ -1,0 +1,349 @@
+{% extends "base.html" %}
+
+{% block title %}Inserisci/Aggiorna Consulente - Staffing Tool{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Gestione Consulenti</h1>
+    <p>Inserisci o aggiorna il profilo di un consulente</p>
+</div>
+
+<div class="form-container">
+    <!-- Consultant Selector -->
+    <div class="selector-section">
+        <label for="consultant-select">Seleziona consulente esistente:</label>
+        <select id="consultant-select" class="form-select" onchange="selectConsultant(this.value)">
+            <option value="new" {% if not selected_consultant %}selected{% endif %}>➕ Nuovo consulente</option>
+            {% for c in consultants %}
+                <option value="{{ c.id }}" {% if selected_consultant and selected_consultant.id == c.id %}selected{% endif %}>
+                    {{ c.name }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <form method="POST" action="{{ url_for('inserisci') }}" class="consultant-form">
+        <input type="hidden" name="consultant_id" value="{{ selected_consultant.id if selected_consultant else 'new' }}">
+
+        <!-- Basic Info -->
+        <section class="form-section">
+            <h2>Informazioni Base</h2>
+            <div class="form-group">
+                <label for="consultant_name">Nome consulente *</label>
+                <input type="text" id="consultant_name" name="consultant_name"
+                       value="{{ selected_consultant.name if selected_consultant else '' }}"
+                       required class="form-input">
+            </div>
+        </section>
+
+        <!-- Skills Section -->
+        <section class="form-section">
+            <h2>Competenze</h2>
+            <p class="section-desc">Imposta il livello (1-5) per ogni competenza. Lascia vuoto se non applicabile.</p>
+
+            <table class="data-table skills-table">
+                <thead>
+                    <tr>
+                        <th>Competenza</th>
+                        <th>Livello (1-5)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for skill in skills %}
+                    <tr>
+                        <td>{{ skill.name }}</td>
+                        <td>
+                            <select name="skill_level_{{ skill.id }}" class="form-select-small">
+                                <option value="">- non impostato -</option>
+                                {% for level in range(1, 6) %}
+                                    <option value="{{ level }}"
+                                        {% if consultant_skills.get(skill.id) == level %}selected{% endif %}>
+                                        {{ level }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Add New Skill -->
+            <div class="inline-add">
+                <h4>Aggiungi nuova competenza</h4>
+                <div class="inline-add-row">
+                    <input type="text" name="new_skill_name" placeholder="Nome nuova competenza" class="form-input">
+                    <select name="new_skill_level" class="form-select-small">
+                        <option value="">- livello -</option>
+                        {% for level in range(1, 6) %}
+                            <option value="{{ level }}">{{ level }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </section>
+
+        <!-- Workload Section -->
+        <section class="form-section">
+            <h2>Workload Mensile</h2>
+            <p class="section-desc">Indica le giornate lavorative e il carico percepito per ogni mese.</p>
+
+            <table class="data-table workload-table">
+                <thead>
+                    <tr>
+                        <th>Mese</th>
+                        <th>Giornate lavorative</th>
+                        <th>Carico percepito (0-10)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for month in range(1, 13) %}
+                    {% set wl = consultant_workloads.get(month, {}) %}
+                    <tr>
+                        <td>{{ get_month_name(month) }}</td>
+                        <td>
+                            <input type="number" name="work_days_{{ month }}"
+                                   value="{{ wl.get('work_days', 0) }}"
+                                   min="0" max="31" class="form-input-small">
+                        </td>
+                        <td>
+                            <div class="slider-container">
+                                <input type="range" name="perceived_{{ month }}"
+                                       value="{{ wl.get('perceived_load', 0) }}"
+                                       min="0" max="10" class="form-slider"
+                                       oninput="this.nextElementSibling.textContent = this.value">
+                                <span class="slider-value">{{ wl.get('perceived_load', 0) }}</span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Project Experience Section -->
+        <section class="form-section">
+            <h2>Esperienze Progetti</h2>
+            <p class="section-desc">Aggiungi progetti su cui hai lavorato.</p>
+
+            <div id="experience-rows">
+                <div class="experience-row" data-index="0">
+                    <div class="exp-grid">
+                        <div class="form-group">
+                            <label>Progetto</label>
+                            <select name="exp_0_project_id" class="form-select">
+                                <option value="">- seleziona progetto -</option>
+                                {% for p in projects %}
+                                    <option value="{{ p.id }}">{{ p.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Ruolo</label>
+                            <input type="text" name="exp_0_role" placeholder="Es: Project Manager" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label>Mese inizio</label>
+                            <select name="exp_0_start_month" class="form-select-small">
+                                <option value="">-</option>
+                                {% for m in range(1, 13) %}
+                                    <option value="{{ m }}">{{ get_month_name(m) }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Anno inizio</label>
+                            <input type="number" name="exp_0_start_year" placeholder="2024" min="2000" max="2100" class="form-input-small">
+                        </div>
+                        <div class="form-group">
+                            <label>Mese fine</label>
+                            <select name="exp_0_end_month" class="form-select-small">
+                                <option value="">-</option>
+                                {% for m in range(1, 13) %}
+                                    <option value="{{ m }}">{{ get_month_name(m) }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Anno fine</label>
+                            <input type="number" name="exp_0_end_year" placeholder="2024" min="2000" max="2100" class="form-input-small">
+                        </div>
+                        <div class="form-group">
+                            <label>Intensità (1-5)</label>
+                            <select name="exp_0_intensity" class="form-select-small">
+                                <option value="">-</option>
+                                {% for i in range(1, 6) %}
+                                    <option value="{{ i }}">{{ i }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group form-group-full">
+                            <label>Note</label>
+                            <textarea name="exp_0_notes" rows="2" class="form-textarea" placeholder="Note aggiuntive..."></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <input type="hidden" name="exp_count" id="exp_count" value="1">
+            <button type="button" class="btn btn-secondary" onclick="addExperienceRow()">+ Aggiungi altra esperienza</button>
+
+            <!-- Add New Project -->
+            <div class="inline-add" style="margin-top: 2rem;">
+                <h4>Crea nuovo progetto</h4>
+                <div class="exp-grid">
+                    <div class="form-group">
+                        <label>Nome progetto</label>
+                        <input type="text" name="new_project_name" placeholder="Nome progetto" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label>Cliente</label>
+                        <input type="text" name="new_project_client" placeholder="Es: Lavazza" class="form-input">
+                    </div>
+                    <div class="form-group form-group-full">
+                        <label>Tag (separati da virgola)</label>
+                        <input type="text" name="new_project_tags" placeholder="DEI, Innovation, Training" class="form-input">
+                    </div>
+                </div>
+                <p class="section-desc">Se crei un nuovo progetto, puoi aggiungere l'esperienza nella riga sopra dopo il salvataggio.</p>
+            </div>
+        </section>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Salva Consulente</button>
+            <a href="{{ url_for('inserisci') }}" class="btn btn-secondary">Annulla</a>
+        </div>
+    </form>
+</div>
+
+<!-- Consultants List -->
+<section class="list-section">
+    <h2>Consulenti Registrati</h2>
+
+    {% if consultants_list %}
+    <div class="cards-grid">
+        {% for c in consultants_list %}
+        <div class="card">
+            <div class="card-header">
+                <h3>{{ c.name }}</h3>
+                <div class="card-actions">
+                    <a href="{{ url_for('consultant_profile', consultant_id=c.id) }}" class="btn btn-small">Profilo</a>
+                    <form method="POST" action="{{ url_for('delete_consultant', consultant_id=c.id) }}"
+                          style="display: inline;" onsubmit="return confirm('Eliminare {{ c.name }}?');">
+                        <button type="submit" class="btn btn-small btn-danger">Elimina</button>
+                    </form>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if c.top_skills %}
+                <div class="skill-tags">
+                    {% for s in c.top_skills %}
+                        <span class="skill-tag">{{ s.name }} ({{ s.level }})</span>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="no-data">Nessuna competenza >= 3</p>
+                {% endif %}
+
+                {% if c.recent_projects %}
+                <div class="recent-projects">
+                    <strong>Ultimi progetti:</strong>
+                    <ul>
+                        {% for p in c.recent_projects %}
+                        <li>{{ p.name }}{% if p.role %} - {{ p.role }}{% endif %}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="no-data">Nessun consulente registrato.</p>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function selectConsultant(value) {
+    if (value === 'new') {
+        window.location.href = '{{ url_for("inserisci") }}';
+    } else {
+        window.location.href = '{{ url_for("inserisci") }}?selected=' + value;
+    }
+}
+
+let expCount = 1;
+
+function addExperienceRow() {
+    const container = document.getElementById('experience-rows');
+    const index = expCount;
+
+    const html = `
+    <div class="experience-row" data-index="${index}">
+        <hr>
+        <div class="exp-grid">
+            <div class="form-group">
+                <label>Progetto</label>
+                <select name="exp_${index}_project_id" class="form-select">
+                    <option value="">- seleziona progetto -</option>
+                    {% for p in projects %}
+                        <option value="{{ p.id }}">{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Ruolo</label>
+                <input type="text" name="exp_${index}_role" placeholder="Es: Project Manager" class="form-input">
+            </div>
+            <div class="form-group">
+                <label>Mese inizio</label>
+                <select name="exp_${index}_start_month" class="form-select-small">
+                    <option value="">-</option>
+                    {% for m in range(1, 13) %}
+                        <option value="{{ m }}">{{ get_month_name(m) }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Anno inizio</label>
+                <input type="number" name="exp_${index}_start_year" placeholder="2024" min="2000" max="2100" class="form-input-small">
+            </div>
+            <div class="form-group">
+                <label>Mese fine</label>
+                <select name="exp_${index}_end_month" class="form-select-small">
+                    <option value="">-</option>
+                    {% for m in range(1, 13) %}
+                        <option value="{{ m }}">{{ get_month_name(m) }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Anno fine</label>
+                <input type="number" name="exp_${index}_end_year" placeholder="2024" min="2000" max="2100" class="form-input-small">
+            </div>
+            <div class="form-group">
+                <label>Intensità (1-5)</label>
+                <select name="exp_${index}_intensity" class="form-select-small">
+                    <option value="">-</option>
+                    {% for i in range(1, 6) %}
+                        <option value="{{ i }}">{{ i }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group form-group-full">
+                <label>Note</label>
+                <textarea name="exp_${index}_notes" rows="2" class="form-textarea" placeholder="Note aggiuntive..."></textarea>
+            </div>
+        </div>
+    </div>
+    `;
+
+    container.insertAdjacentHTML('beforeend', html);
+    expCount++;
+    document.getElementById('exp_count').value = expCount;
+}
+</script>
+{% endblock %}

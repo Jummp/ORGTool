@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Catalogo Progetti - Staffing Tool{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Catalogo Progetti</h1>
+    <p>Gestisci i progetti e visualizza chi ci ha lavorato</p>
+</div>
+
+<!-- Filters -->
+<form method="GET" action="{{ url_for('projects') }}" class="filters-form">
+    <div class="filters-grid filters-grid-compact">
+        <div class="filter-group">
+            <label for="search">Cerca progetto</label>
+            <input type="text" name="search" id="search" value="{{ search }}"
+                   placeholder="Nome progetto..." class="form-input">
+        </div>
+
+        <div class="filter-group">
+            <label for="client">Cliente</label>
+            <select name="client" id="client" class="form-select">
+                <option value="">- tutti -</option>
+                {% for c in all_clients %}
+                    <option value="{{ c }}" {% if client_filter == c %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label for="tag">Tag</label>
+            <select name="tag" id="tag" class="form-select">
+                <option value="">- tutti -</option>
+                {% for t in all_tags %}
+                    <option value="{{ t }}" {% if tag_filter == t %}selected{% endif %}>{{ t }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="filter-group filter-actions">
+            <button type="submit" class="btn btn-primary">Filtra</button>
+            <a href="{{ url_for('projects') }}" class="btn btn-secondary">Reset</a>
+        </div>
+    </div>
+</form>
+
+<!-- Add New Project Form -->
+<div class="add-form-section">
+    <h3>Aggiungi nuovo progetto</h3>
+    <form method="POST" action="{{ url_for('projects') }}" class="add-project-form">
+        <div class="add-form-grid">
+            <div class="form-group">
+                <label for="name">Nome progetto *</label>
+                <input type="text" name="name" id="name" required class="form-input"
+                       placeholder="Es: Cliente – Nome Progetto">
+            </div>
+
+            <div class="form-group">
+                <label for="client">Cliente</label>
+                <input type="text" name="client" id="client_input" class="form-input"
+                       placeholder="Es: Lavazza">
+            </div>
+
+            <div class="form-group form-group-full">
+                <label for="domain_tags">Tag (separati da virgola)</label>
+                <input type="text" name="domain_tags" id="domain_tags" class="form-input"
+                       placeholder="Es: DEI, Innovation, Training">
+            </div>
+
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">Crea Progetto</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Projects List -->
+<section class="list-section">
+    <h2>Progetti ({{ projects|length }})</h2>
+
+    {% if projects %}
+    <div class="cards-grid">
+        {% for p in projects %}
+        <div class="card project-card">
+            <div class="card-header">
+                <h3>{{ p.name }}</h3>
+                {% if p.client %}
+                <span class="project-client">{{ p.client }}</span>
+                {% endif %}
+            </div>
+
+            <div class="card-body">
+                {% if p.tags %}
+                <div class="tag-list">
+                    {% for tag in p.tags %}
+                        <span class="tag">{{ tag }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if p.consultants %}
+                <div class="consultants-list">
+                    <strong>Consulenti che ci hanno lavorato:</strong>
+                    <ul>
+                        {% for c in p.consultants %}
+                        <li>
+                            <a href="{{ url_for('consultant_profile', consultant_id=c.id) }}">{{ c.name }}</a>
+                            {% if c.role %}<span class="consultant-role">({{ c.role }})</span>{% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% else %}
+                <p class="no-data">Nessun consulente assegnato.</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="no-data">Nessun progetto trovato con i filtri selezionati.</p>
+    {% endif %}
+</section>
+{% endblock %}
