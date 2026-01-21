@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+
+{% block title %}Overview Disponibilità - Staffing Tool{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Overview Disponibilità</h1>
+    <p>Visualizza e filtra i consulenti per disponibilità e competenze</p>
+</div>
+
+<!-- Filters -->
+<form method="GET" action="{{ url_for('overview') }}" class="filters-form">
+    <div class="filters-grid">
+        <div class="filter-group">
+            <label for="month">Mese *</label>
+            <select name="month" id="month" class="form-select" required>
+                {% for m in range(1, 13) %}
+                    <option value="{{ m }}" {% if month == m %}selected{% endif %}>
+                        {{ get_month_name(m) }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label for="search">Cerca consulente</label>
+            <input type="text" name="search" id="search" value="{{ search }}"
+                   placeholder="Nome..." class="form-input">
+        </div>
+
+        <div class="filter-group">
+            <label for="skill_id">Competenza</label>
+            <select name="skill_id" id="skill_id" class="form-select">
+                <option value="">- tutte -</option>
+                {% for s in all_skills %}
+                    <option value="{{ s.id }}" {% if skill_id == s.id %}selected{% endif %}>
+                        {{ s.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label for="min_level">Livello minimo</label>
+            <select name="min_level" id="min_level" class="form-select">
+                {% for level in range(1, 6) %}
+                    <option value="{{ level }}" {% if min_level == level %}selected{% endif %}>
+                        {{ level }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label for="project_id">Ha lavorato su progetto</label>
+            <select name="project_id" id="project_id" class="form-select">
+                <option value="">- qualsiasi -</option>
+                {% for p in all_projects %}
+                    <option value="{{ p.id }}" {% if project_id == p.id %}selected{% endif %}>
+                        {{ p.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label for="client">Cliente</label>
+            <select name="client" id="client" class="form-select">
+                <option value="">- qualsiasi -</option>
+                {% for c in all_clients %}
+                    <option value="{{ c }}" {% if client_filter == c %}selected{% endif %}>
+                        {{ c }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label for="tag">Tag progetto</label>
+            <select name="tag" id="tag" class="form-select">
+                <option value="">- qualsiasi -</option>
+                {% for t in all_tags %}
+                    <option value="{{ t }}" {% if tag_filter == t %}selected{% endif %}>
+                        {{ t }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="filter-group filter-actions">
+            <button type="submit" class="btn btn-primary">Filtra</button>
+            <a href="{{ url_for('overview') }}" class="btn btn-secondary">Reset</a>
+        </div>
+    </div>
+
+    <input type="hidden" name="view" id="view-input" value="{{ view }}">
+</form>
+
+<!-- View Toggle -->
+<div class="view-toggle-bar">
+    <span>Visualizzazione:</span>
+    <button type="button" class="toggle-btn {% if view == 'cards' %}active{% endif %}"
+            onclick="switchView('cards')">Cards</button>
+    <button type="button" class="toggle-btn {% if view == 'chart' %}active{% endif %}"
+            onclick="switchView('chart')">Grafico</button>
+    <span class="results-count">{{ results|length }} consulenti trovati</span>
+</div>
+
+<!-- Cards View -->
+<div id="cards-view" class="results-container" {% if view == 'chart' %}style="display: none;"{% endif %}>
+    {% if results %}
+    <div class="cards-grid">
+        {% for r in results %}
+        <div class="card consultant-card">
+            <div class="card-header">
+                <h3>
+                    <a href="{{ url_for('consultant_profile', consultant_id=r.id) }}">{{ r.name }}</a>
+                </h3>
+            </div>
+            <div class="card-body">
+                <div class="availability-display">
+                    <div class="availability-bar">
+                        <div class="availability-fill"
+                             style="width: {{ r.workload_data.availability_percent }}%;
+                                    background: {{ 'var(--success)' if r.workload_data.availability_percent > 60 else ('var(--warning)' if r.workload_data.availability_percent > 30 else 'var(--danger)') }};">
+                        </div>
+                    </div>
+                    <div class="availability-details">
+                        <span class="availability-percent">{{ r.workload_data.availability_percent }}% disponibile</span>
+                        <span class="workload-info">
+                            ({{ r.workload_data.work_days }}gg, carico {{ r.workload_data.perceived_load }}/10)
+                        </span>
+                    </div>
+                </div>
+
+                {% if r.top_skills %}
+                <div class="skill-tags">
+                    {% for s in r.top_skills %}
+                        <span class="skill-tag {% if selected_skill and s.name == selected_skill.name %}highlight{% endif %}">
+                            {{ s.name }} ({{ s.level }})
+                        </span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if r.recent_projects %}
+                <div class="recent-projects">
+                    <strong>Ultimi progetti:</strong>
+                    <ul>
+                        {% for p in r.recent_projects %}
+                        <li>{{ p.name }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+            <div class="card-footer">
+                <a href="{{ url_for('consultant_profile', consultant_id=r.id) }}" class="btn btn-small">Vedi profilo</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="no-data">Nessun consulente corrisponde ai filtri selezionati.</p>
+    {% endif %}
+</div>
+
+<!-- Chart View -->
+<div id="chart-view" class="results-container" {% if view == 'cards' %}style="display: none;"{% endif %}>
+    <div class="chart-container">
+        <canvas id="overviewChart"></canvas>
+    </div>
+    <p class="chart-help">
+        Asse X: Workload % (0=libero, 100=pieno carico)<br>
+        Asse Y: {% if selected_skill %}Livello {{ selected_skill.name }}{% else %}Media top 3 competenze{% endif %}<br>
+        Clicca su un punto per aprire il profilo.
+    </p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const chartData = {{ chart_data|safe }};
+
+function switchView(view) {
+    document.getElementById('cards-view').style.display = view === 'cards' ? 'block' : 'none';
+    document.getElementById('chart-view').style.display = view === 'chart' ? 'block' : 'none';
+    document.getElementById('view-input').value = view;
+
+    document.querySelectorAll('.view-toggle-bar .toggle-btn').forEach(btn => btn.classList.remove('active'));
+    event.target.classList.add('active');
+
+    if (view === 'chart' && !window.overviewChartInstance) {
+        createOverviewChart();
+    }
+}
+
+function createOverviewChart() {
+    const ctx = document.getElementById('overviewChart').getContext('2d');
+
+    const data = chartData.consultants.map(c => ({
+        x: c.workload,
+        y: c.skill_level,
+        name: c.name,
+        id: c.id,
+        availability: c.availability,
+        projects: c.projects
+    }));
+
+    window.overviewChartInstance = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: 'Consulenti',
+                data: data,
+                backgroundColor: data.map(d =>
+                    d.availability > 60 ? 'rgba(46, 204, 113, 0.8)' :
+                    d.availability > 30 ? 'rgba(241, 196, 15, 0.8)' :
+                    'rgba(231, 76, 60, 0.8)'
+                ),
+                borderColor: 'rgba(0, 0, 0, 0.3)',
+                borderWidth: 1,
+                pointRadius: 12,
+                pointHoverRadius: 15
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    min: 0,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Workload %'
+                    }
+                },
+                y: {
+                    min: 0,
+                    max: 5,
+                    title: {
+                        display: true,
+                        text: '{% if selected_skill %}{{ selected_skill.name }}{% else %}Media top 3 skill{% endif %}'
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const d = context.raw;
+                            let lines = [
+                                d.name,
+                                'Workload: ' + d.x + '%',
+                                'Disponibilità: ' + d.availability + '%',
+                                'Skill: ' + d.y
+                            ];
+                            if (d.projects && d.projects.length > 0) {
+                                lines.push('Progetti: ' + d.projects.join(', '));
+                            }
+                            return lines;
+                        }
+                    }
+                },
+                legend: {
+                    display: false
+                }
+            },
+            onClick: function(event, elements) {
+                if (elements.length > 0) {
+                    const index = elements[0].index;
+                    const consultantId = data[index].id;
+                    window.location.href = '/consultant/' + consultantId;
+                }
+            }
+        }
+    });
+}
+
+// Initialize chart if chart view is active
+{% if view == 'chart' %}
+document.addEventListener('DOMContentLoaded', function() {
+    createOverviewChart();
+});
+{% endif %}
+</script>
+{% endblock %}

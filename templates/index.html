@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Staffing Tool{% endblock %}
+
+{% block content %}
+<div class="home-container">
+    <h1>Staffing Tool</h1>
+    <p class="subtitle">Gestione consulenti, competenze e staffing progetti</p>
+
+    <div class="home-buttons">
+        <a href="{{ url_for('inserisci') }}" class="home-btn home-btn-primary">
+            <span class="btn-icon">👤</span>
+            <span class="btn-title">Consulente</span>
+            <span class="btn-desc">Inserisci/Aggiorna profilo</span>
+        </a>
+
+        <a href="{{ url_for('overview') }}" class="home-btn home-btn-secondary">
+            <span class="btn-icon">📊</span>
+            <span class="btn-title">Account: Overview</span>
+            <span class="btn-desc">Visualizza disponibilità</span>
+        </a>
+
+        <a href="{{ url_for('match') }}" class="home-btn home-btn-accent">
+            <span class="btn-icon">🎯</span>
+            <span class="btn-title">Account: Match</span>
+            <span class="btn-desc">Trova consulenti per progetto</span>
+        </a>
+
+        <a href="{{ url_for('projects') }}" class="home-btn home-btn-neutral">
+            <span class="btn-icon">📁</span>
+            <span class="btn-title">Catalogo Progetti</span>
+            <span class="btn-desc">Gestisci progetti</span>
+        </a>
+    </div>
+</div>
+{% endblock %}
